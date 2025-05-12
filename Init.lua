@@ -1,339 +1,321 @@
-
--- SkyHub UI Library Completa com: Tabs, Buttons, Toggles, Dropdowns, Sliders, Textboxes, Labels
--- Inspirada no estilo SkyHub (draggable + animações suaves)
-
--- Essa é uma versão resumida por espaço, mas o script está funcional e modular.
--- Para projetos grandes, é recomendado dividir isso em ModuleScripts no Roblox Studio.
-
--- ⚠️ O código é longo, então verifique o final do arquivo se ele estiver cortado
-
 local TweenService = game:GetService("TweenService")
-local UIS = game:GetService("UserInputService")
-local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
-local SkyHubUI = {}
-SkyHubUI.__index = SkyHubUI
+local SkyHub = {}
+SkyHub.__index = SkyHub
 
-local function create(class, props)
-	local obj = Instance.new(class)
-	for prop, value in pairs(props) do
-		obj[prop] = value
+local function createInstance(class, props)
+	local inst = Instance.new(class)
+	for k, v in pairs(props) do
+		inst[k] = v
 	end
-	return obj
+	return inst
 end
 
-local function makeDraggable(frame, dragHandle)
-	local dragging, dragInput, startPos, startInputPos
-	dragHandle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging = true
-			startInputPos = input.Position
-			startPos = frame.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
-		end
-	end)
-
-	dragHandle.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			dragInput = input
-		end
-	end)
-
-	UIS.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
-			local delta = input.Position - startInputPos
-			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-									   startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
+local function tween(obj, properties, duration)
+	TweenService:Create(obj, TweenInfo.new(duration or 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties):Play()
 end
 
-function SkyHubUI:CreateWindow(config)
-	local player = Players.LocalPlayer
-	local gui = create("ScreenGui", {
+function SkyHub:Create(title)
+	local self = setmetatable({}, SkyHub)
+	
+	-- Main GUI
+	local ScreenGui = createInstance("ScreenGui", {
 		Name = "SkyHubUI",
+		Parent = game:GetService("CoreGui"),
 		ResetOnSpawn = false,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		Parent = player:WaitForChild("PlayerGui")
+		ZIndexBehavior = Enum.ZIndexBehavior.Global
 	})
 
-	local main = create("Frame", {
-		Name = "Main",
-		Size = UDim2.new(0, 520, 0, 360),
-		Position = UDim2.new(0.5, -260, 0.5, -180),
-		BackgroundColor3 = Color3.fromRGB(25, 25, 35),
-		BorderSizePixel = 0,
+	local Main = createInstance("Frame", {
+		Size = UDim2.new(0, 560, 0, 360),
+		Position = UDim2.new(0.5, -280, 0.5, -180),
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Parent = gui
+		BackgroundColor3 = Color3.fromRGB(20, 20, 20),
+		Parent = ScreenGui,
+		Draggable = true,
+		Active = true
 	})
-	create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = main })
+	createInstance("UICorner", { CornerRadius = UDim.new(0, 8), Parent = Main })
+	createInstance("UIStroke", { Color = Color3.fromRGB(0, 255, 140), Thickness = 1.2, Parent = Main })
 
-	local topbar = create("TextLabel", {
+	local Title = createInstance("TextLabel", {
 		Size = UDim2.new(1, 0, 0, 30),
-		BackgroundColor3 = Color3.fromRGB(40, 40, 60),
-		Text = config.Title or "SkyHub UI",
-		TextColor3 = Color3.new(1,1,1),
-		Font = Enum.Font.GothamSemibold,
-		TextSize = 14,
-		Parent = main
+		BackgroundTransparency = 1,
+		Text = title or "SkyHub UI",
+		TextColor3 = Color3.fromRGB(0, 255, 140),
+		TextSize = 18,
+		Font = Enum.Font.GothamBold,
+		Parent = Main
 	})
-	create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = topbar })
 
-	local tabHolder = create("Frame", {
+	local TabList = createInstance("Frame", {
+		Size = UDim2.new(0, 100, 1, -30),
 		Position = UDim2.new(0, 0, 0, 30),
-		Size = UDim2.new(0, 130, 1, -30),
-		BackgroundColor3 = Color3.fromRGB(30,30,45),
-		BorderSizePixel = 0,
-		Parent = main
+		BackgroundColor3 = Color3.fromRGB(25, 25, 25),
+		Parent = Main
+	})
+	createInstance("UICorner", { CornerRadius = UDim.new(0, 6), Parent = TabList })
+
+	local TabContent = createInstance("Frame", {
+		Size = UDim2.new(1, -100, 1, -30),
+		Position = UDim2.new(0, 100, 0, 30),
+		BackgroundTransparency = 1,
+		Parent = Main
 	})
 
-	local pageHolder = create("Frame", {
-		Position = UDim2.new(0, 130, 0, 30),
-		Size = UDim2.new(1, -130, 1, -30),
-		BackgroundColor3 = Color3.fromRGB(35,35,50),
-		BorderSizePixel = 0,
-		Parent = main
+	local TabButtonsLayout = createInstance("UIListLayout", {
+		Parent = TabList,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 4)
 	})
 
-	local currentPage = nil
+	self.Tabs = {}
+	self.TabContent = TabContent
+	self.CurrentTab = nil
 
-	local function switchTo(page)
-		for _,v in ipairs(pageHolder:GetChildren()) do
-			if v:IsA("Frame") then v.Visible = false end
-		end
-		page.Visible = true
-	end
-
-	local windowAPI = {}
-
-	function windowAPI:AddTab(tabName)
-		local tabBtn = create("TextButton", {
-			Size = UDim2.new(1, 0, 0, 30),
-			BackgroundColor3 = Color3.fromRGB(40,40,60),
-			Text = tabName,
-			TextColor3 = Color3.new(1,1,1),
-			Font = Enum.Font.GothamSemibold,
-			TextSize = 13,
-			Parent = tabHolder
+	function self:CreateTab(name)
+		local TabBtn = createInstance("TextButton", {
+			Size = UDim2.new(1, -8, 0, 28),
+			Text = name,
+			Font = Enum.Font.Gotham,
+			TextSize = 14,
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+			Parent = TabList
 		})
+		createInstance("UICorner", { CornerRadius = UDim.new(0, 5), Parent = TabBtn })
 
-		local tabPage = create("Frame", {
+		local Container = createInstance("Frame", {
 			Visible = false,
 			Size = UDim2.new(1, 0, 1, 0),
 			BackgroundTransparency = 1,
-			Parent = pageHolder
+			Parent = TabContent
 		})
-
-		local layout = create("UIListLayout", {
-			Padding = UDim.new(0, 6),
+		local Layout = createInstance("UIListLayout", {
+			Parent = Container,
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Parent = tabPage
+			Padding = UDim.new(0, 6)
 		})
 
-		tabBtn.MouseButton1Click:Connect(function()
-			switchTo(tabPage)
+		TabBtn.MouseButton1Click:Connect(function()
+			if self.CurrentTab then self.CurrentTab.Visible = false end
+			Container.Visible = true
+			self.CurrentTab = Container
 		end)
 
-		if not currentPage then
-			switchTo(tabPage)
+		self.Tabs[name] = Container
+		if not self.CurrentTab then
+			Container.Visible = true
+			self.CurrentTab = Container
 		end
 
-		local tabAPI = {}
+		local Elements = {}
 
-		function tabAPI:AddLabel(text)
-			create("TextLabel", {
-				Size = UDim2.new(1, -12, 0, 20),
-				BackgroundTransparency = 1,
+		function Elements:Button(text, callback)
+			local Btn = createInstance("TextButton", {
 				Text = text,
-				TextColor3 = Color3.new(1,1,1),
 				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Parent = tabPage
+				TextSize = 14,
+				TextColor3 = Color3.fromRGB(0, 255, 140),
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				Size = UDim2.new(1, -10, 0, 28),
+				Parent = Container
 			})
-		end
-
-		function tabAPI:AddButton(text, callback)
-			local btn = create("TextButton", {
-				Size = UDim2.new(1, -12, 0, 26),
-				BackgroundColor3 = Color3.fromRGB(70, 60, 90),
-				Text = text,
-				TextColor3 = Color3.new(1,1,1),
-				Font = Enum.Font.GothamBold,
-				TextSize = 13,
-				Parent = tabPage
-			})
-			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = btn })
-			btn.MouseButton1Click:Connect(callback)
-		end
-
-		function tabAPI:AddToggle(text, callback)
-			local toggle = false
-			local frame = create("Frame", {
-				Size = UDim2.new(1, -12, 0, 26),
-				BackgroundTransparency = 1,
-				Parent = tabPage
-			})
-			local btn = create("TextButton", {
-				Size = UDim2.new(0, 24, 0, 24),
-				Position = UDim2.new(1, -28, 0, 1),
-				BackgroundColor3 = Color3.fromRGB(90, 90, 90),
-				Text = "",
-				Parent = frame
-			})
-			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = btn })
-
-			local label = create("TextLabel", {
-				Size = UDim2.new(1, -30, 1, 0),
-				BackgroundTransparency = 1,
-				Text = text,
-				TextColor3 = Color3.new(1,1,1),
-				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Parent = frame
-			})
-
-			btn.MouseButton1Click:Connect(function()
-				toggle = not toggle
-				btn.BackgroundColor3 = toggle and Color3.fromRGB(160, 80, 255) or Color3.fromRGB(90, 90, 90)
-				callback(toggle)
+			createInstance("UICorner", { Parent = Btn })
+			Btn.MouseButton1Click:Connect(function()
+				pcall(callback)
 			end)
 		end
 
-		function tabAPI:AddTextbox(placeholder, callback)
-			local box = create("TextBox", {
-				Size = UDim2.new(1, -12, 0, 26),
-				BackgroundColor3 = Color3.fromRGB(50, 50, 70),
-				Text = "",
-				PlaceholderText = placeholder,
-				TextColor3 = Color3.new(1,1,1),
-				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				Parent = tabPage
-			})
-			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = box })
-
-			box.FocusLost:Connect(function(enter)
-				if enter then callback(box.Text) end
-			end)
-		end
-
-		function tabAPI:AddDropdown(title, options, callback)
-			local holder = create("Frame", {
-				Size = UDim2.new(1, -12, 0, 26),
-				BackgroundColor3 = Color3.fromRGB(50, 50, 70),
-				Parent = tabPage
-			})
-			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = holder })
-
-			local btn = create("TextButton", {
-				Size = UDim2.new(1, 0, 1, 0),
+		function Elements:Toggle(text, default, callback)
+			local Frame = createInstance("Frame", {
+				Size = UDim2.new(1, -10, 0, 28),
 				BackgroundTransparency = 1,
-				Text = title,
-				TextColor3 = Color3.new(1,1,1),
+				Parent = Container
+			})
+			local Btn = createInstance("TextButton", {
+				Size = UDim2.new(0, 28, 0, 28),
+				BackgroundColor3 = default and Color3.fromRGB(0, 255, 140) or Color3.fromRGB(40, 40, 40),
+				Parent = Frame,
+				Text = ""
+			})
+			createInstance("UICorner", { Parent = Btn })
+			local Label = createInstance("TextLabel", {
+				Size = UDim2.new(1, -34, 1, 0),
+				Position = UDim2.new(0, 34, 0, 0),
+				BackgroundTransparency = 1,
+				Text = text,
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextSize = 14,
 				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				Parent = holder
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = Frame
 			})
 
-			local dropdownFrame = create("Frame", {
-				Size = UDim2.new(1, 0, 0, #options * 24),
-				Visible = false,
-				BackgroundColor3 = Color3.fromRGB(45,45,65),
-				Parent = tabPage
-			})
-
-			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = dropdownFrame })
-
-			local layout = create("UIListLayout", {
-				Padding = UDim.new(0, 2),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				Parent = dropdownFrame
-			})
-
-			for _,opt in ipairs(options) do
-				local optBtn = create("TextButton", {
-					Size = UDim2.new(1, 0, 0, 24),
-					BackgroundColor3 = Color3.fromRGB(60, 60, 90),
-					Text = opt,
-					TextColor3 = Color3.new(1,1,1),
-					Font = Enum.Font.Gotham,
-					TextSize = 12,
-					Parent = dropdownFrame
+			local state = default
+			Btn.MouseButton1Click:Connect(function()
+				state = not state
+				tween(Btn, {
+					BackgroundColor3 = state and Color3.fromRGB(0, 255, 140) or Color3.fromRGB(40, 40, 40)
 				})
-				optBtn.MouseButton1Click:Connect(function()
-					callback(opt)
-					dropdownFrame.Visible = false
-				end)
-			end
-
-			btn.MouseButton1Click:Connect(function()
-				dropdownFrame.Visible = not dropdownFrame.Visible
+				pcall(callback, state)
 			end)
 		end
 
-		function tabAPI:AddSlider(text, data, callback)
-			local sliderHolder = create("Frame", {
-				Size = UDim2.new(1, -12, 0, 40),
+		function Elements:Label(text)
+			createInstance("TextLabel", {
+				Text = text,
+				Font = Enum.Font.GothamSemibold,
+				TextSize = 14,
+				TextColor3 = Color3.fromRGB(200, 200, 200),
 				BackgroundTransparency = 1,
-				Parent = tabPage
+				Size = UDim2.new(1, -10, 0, 24),
+				Parent = Container,
+				TextXAlignment = Enum.TextXAlignment.Left
 			})
+		end
 
-			local label = create("TextLabel", {
-				Text = text .. ": " .. data.default,
-				Size = UDim2.new(1, 0, 0, 18),
-				BackgroundTransparency = 1,
-				TextColor3 = Color3.new(1,1,1),
+		function Elements:Textbox(placeholder, callback)
+			local Box = createInstance("TextBox", {
+				PlaceholderText = placeholder,
 				Font = Enum.Font.Gotham,
-				TextSize = 12,
+				TextSize = 14,
+				TextColor3 = Color3.fromRGB(0, 255, 140),
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				Size = UDim2.new(1, -10, 0, 28),
+				ClearTextOnFocus = false,
+				Parent = Container
+			})
+			createInstance("UICorner", { Parent = Box })
+
+			Box.FocusLost:Connect(function()
+				pcall(callback, Box.Text)
+			end)
+		end
+
+		function Elements:Slider(text, min, max, default, callback)
+			local Frame = createInstance("Frame", {
+				Size = UDim2.new(1, -10, 0, 40),
+				BackgroundTransparency = 1,
+				Parent = Container
+			})
+
+			local Label = createInstance("TextLabel", {
+				Text = text .. " - " .. tostring(default),
+				Size = UDim2.new(1, 0, 0, 16),
+				Font = Enum.Font.Gotham,
+				TextSize = 13,
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				BackgroundTransparency = 1,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				Parent = sliderHolder
+				Parent = Frame
 			})
 
-			local sliderBar = create("Frame", {
-				Size = UDim2.new(1, 0, 0, 8),
-				Position = UDim2.new(0, 0, 0, 22),
-				BackgroundColor3 = Color3.fromRGB(60, 60, 80),
-				Parent = sliderHolder
+			local Bar = createInstance("Frame", {
+				Size = UDim2.new(1, 0, 0, 10),
+				Position = UDim2.new(0, 0, 0, 25),
+				BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+				Parent = Frame
 			})
+			createInstance("UICorner", { Parent = Bar })
 
-			local sliderFill = create("Frame", {
-				Size = UDim2.new((data.default - data.min) / (data.max - data.min), 0, 1, 0),
-				BackgroundColor3 = Color3.fromRGB(160, 80, 255),
-				Parent = sliderBar
+			local Fill = createInstance("Frame", {
+				Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
+				BackgroundColor3 = Color3.fromRGB(0, 255, 140),
+				Parent = Bar
 			})
+			createInstance("UICorner", { Parent = Fill })
 
-			UIS.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-					local moveConn
-					moveConn = UIS.InputChanged:Connect(function(moveInput)
-						if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
-							local pos = moveInput.Position.X
-							local absPos = sliderBar.AbsolutePosition.X
-							local width = sliderBar.AbsoluteSize.X
-							local pct = math.clamp((pos - absPos) / width, 0, 1)
-							sliderFill.Size = UDim2.new(pct, 0, 1, 0)
-							local val = math.floor((data.min + ((data.max - data.min) * pct)) + 0.5)
-							label.Text = text .. ": " .. val
-							callback(val)
-						end
-					end)
-					wait(0.4)
-					if moveConn then moveConn:Disconnect() end
+			local dragging = false
+			Bar.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+			end)
+			UserInputService.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+			end)
+			UserInputService.InputChanged:Connect(function(input)
+				if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+					local pos = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+					local val = math.floor((min + (max - min) * pos) + 0.5)
+					Fill.Size = UDim2.new(pos, 0, 1, 0)
+					Label.Text = text .. " - " .. tostring(val)
+					pcall(callback, val)
 				end
 			end)
 		end
 
-		return tabAPI
+		function Elements:Dropdown(text, list, callback)
+			local Frame = createInstance("Frame", {
+				Size = UDim2.new(1, -10, 0, 28),
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+				Parent = Container,
+				ClipsDescendants = true
+			})
+			createInstance("UICorner", { Parent = Frame })
+
+			local Label = createInstance("TextLabel", {
+				Text = text,
+				Font = Enum.Font.Gotham,
+				TextSize = 14,
+				TextColor3 = Color3.fromRGB(0, 255, 140),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -30, 1, 0),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = Frame
+			})
+
+			local Btn = createInstance("TextButton", {
+				Text = "▼",
+				Size = UDim2.new(0, 30, 1, 0),
+				Position = UDim2.new(1, -30, 0, 0),
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				Font = Enum.Font.Gotham,
+				TextSize = 14,
+				Parent = Frame
+			})
+
+			local isOpen = false
+			local Options = {}
+
+			local function Toggle()
+				isOpen = not isOpen
+				tween(Frame, { Size = UDim2.new(1, -10, 0, isOpen and (#Options * 24 + 28) or 28) })
+			end
+
+			Btn.MouseButton1Click:Connect(Toggle)
+
+			function Elements:AddOption(option)
+				local OptBtn = createInstance("TextButton", {
+					Size = UDim2.new(1, 0, 0, 24),
+					Position = UDim2.new(0, 0, 0, (#Options + 1) * 24),
+					BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+					Text = option,
+					TextColor3 = Color3.fromRGB(255, 255, 255),
+					Font = Enum.Font.Gotham,
+					TextSize = 13,
+					Parent = Frame
+				})
+				createInstance("UICorner", { Parent = OptBtn })
+				table.insert(Options, OptBtn)
+
+				OptBtn.MouseButton1Click:Connect(function()
+					Label.Text = text .. ": " .. option
+					Toggle()
+					pcall(callback, option)
+				end)
+			end
+
+			for _, opt in ipairs(list) do
+				Elements:AddOption(opt)
+			end
+		end
+
+		return Elements
 	end
 
-	makeDraggable(main, topbar)
-	return windowAPI
+	return self
 end
 
-return SkyHubUI
+return SkyHub
